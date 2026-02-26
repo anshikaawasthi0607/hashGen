@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HashGen — Cryptographic Hash Service</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- heading -->
+  <header class="header">
+    <div class="header__inner">
+      <h1 class="header__title"><span>hash</span>gen</h1>
+      </div>
+  </header>
+
+ 
+  <main class="container">
+    <section class="card generator-card">
+      <h2 class="card__title">Generate Hash</h2>
+      <p class="card__desc">
+        Enter alphanumeric text (a–z, A–Z, 0–9). The service will generate a unique SHA-256 hash for your input.
+      </p>
+      <div class="input-group">
+        <input
+          type="text"
+          id="inputField"
+          class="input-field"
+          placeholder="e.g. HelloWorld123"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="512"
+        />
+        <button id="generateBtn" class="btn-generate">Generate Hash</button>
+      </div>
+      <p id="errorMsg" class="error-msg"></p>
+    </section>
+
+    <!-- Result (hidden until first hash) -->
+    <section id="resultSection" class="card result-section" style="display:none">
+      <p class="result__label">Generated Hash</p>
+      <div class="result__hash" id="resultHash">——————————</div>
+      <div class="result__divider"></div>
+      <div class="result__meta">
+        <p>Input &nbsp;&rarr;&nbsp; <span id="resultInput">—</span></p>
+      </div>
+      <div class="result__actions">
+        <button id="copyBtn" class="btn-copy">Copy Hash</button>
+      </div>
+    </section>
+
+  </main>
+  
+  <script>
+    'use strict';
+
+    /* ── API layer ─────────────────────────────────────────────────────── */
+    const API = {
+      async generateHash(input) {
+        const res = await fetch('/api/hash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to generate hash');
+        return data;
+      },
+    };
+
+    /* ── UI layer ──────────────────────────────────────────────────────── */
+    const UI = {
+      inputField:    null,
+      generateBtn:   null,
+      errorMsg:      null,
+      resultSection: null,
+      resultHash:    null,
+      resultInput:   null,
+      copyBtn:       null,
+
+      init() {
+        this.inputField    = document.getElementById('inputField');
+        this.generateBtn   = document.getElementById('generateBtn');
+        this.errorMsg      = document.getElementById('errorMsg');
+        this.resultSection = document.getElementById('resultSection');
+        this.resultHash    = document.getElementById('resultHash');
+        this.resultInput   = document.getElementById('resultInput');
+        this.copyBtn       = document.getElementById('copyBtn');
+
+        this.generateBtn.addEventListener('click', () => this.handleGenerate());
+        this.inputField.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') this.handleGenerate();
+        });
+        this.inputField.addEventListener('input', () => this.clearError());
+        this.copyBtn.addEventListener('click', () => this.copyHash());
+      },
+
+      /* Client-side validation mirrors server-side rules */
+      validateInput(input) {
+        if (!input.trim()) return 'Input cannot be empty.';
+        if (!/^[a-zA-Z0-9]+$/.test(input))
+          return 'Input must contain only alphanumeric characters (a–z, A–Z, 0–9).';
+        return null;
+      },
+
+      async handleGenerate() {
+        const input = this.inputField.value.trim();
+        const err   = this.validateInput(input);
+        if (err) { this.showError(err); return; }
+
+        this.clearError();
+        this.setLoading(true);
+
+        try {
+          const data = await API.generateHash(input);
+          this.showResult(data);
+        } catch (err) {
+          this.showError(err.message);
+        } finally {
+          this.setLoading(false);
+        }
+      },
+
+      showResult(data) {
+        this.resultHash.textContent  = data.hash;
+        this.resultInput.textContent = data.input;
+        this.resultSection.style.display = 'block';
+        this.resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      },
+
+      showError(msg) {
+        this.errorMsg.textContent = msg;
+        this.inputField.classList.add('input--error');
+      },
+
+      clearError() {
+        this.errorMsg.textContent = '';
+        this.inputField.classList.remove('input--error');
+      },
+
+      setLoading(loading) {
+        this.generateBtn.disabled = loading;
+        this.generateBtn.innerHTML = loading
+          ? '<span class="spinner"></span>Generating…'
+          : 'Generate Hash';
+      },
+
+      async copyHash() {
+        const hash = this.resultHash.textContent;
+        try {
+          await navigator.clipboard.writeText(hash);
+        } catch {
+          /* Fallback for browsers without clipboard API */
+          const el = Object.assign(document.createElement('textarea'), {
+            value: hash, style: 'position:fixed;opacity:0',
+          });
+          document.body.appendChild(el);
+          el.select();
+          document.execCommand('copy');
+          document.body.removeChild(el);
+        }
+        const orig = this.copyBtn.textContent;
+        this.copyBtn.textContent = 'Copied!';
+        setTimeout(() => { this.copyBtn.textContent = orig; }, 2000);
+      },
+    };
+
+    document.addEventListener('DOMContentLoaded', () => UI.init());
+  </script>
+</body>
+</html>
